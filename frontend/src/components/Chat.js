@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import "./Chat.css";
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
