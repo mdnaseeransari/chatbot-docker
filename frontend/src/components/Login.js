@@ -17,8 +17,8 @@ function Login({ onLogin }) {
     setLoading(true);
     setError("");
     const url = tab === "register"
-      ? "https://localhost:5000/api/auth/register"
-      : "https://localhost:5000/api/auth/login";
+      ? "http://localhost:5000/api/auth/register"
+      : "http://localhost:5000/api/auth/login";
     try {
       const res = await axios.post(url, { username, password });
       if (tab === "register") {
