@@ -1,6 +1,29 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import axios from "axios";
+import {
+  MessageCircle,
+  Sun,
+  Moon,
+  Search,
+  X,
+  Paperclip,
+  Smile,
+  Send,
+  VolumeX,
+  Mic,
+  CameraOff,
+  Video,
+  RefreshCw,
+  Phone,
+  PhoneOff,
+  Pencil,
+  Trash2,
+  Loader,
+  FileText,
+  Lock,
+  Download,
+} from "lucide-react";
 import "./Chat.css";
 
 const BACKEND_URL = "http://localhost:5000";
@@ -352,7 +375,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
             )}
             {remoteMuted && call?.status === "active" && (
               <button className="unmute-badge" onClick={handleUnmute}>
-                🔇 Tap to unmute
+                <VolumeX size={14} /> Tap to unmute
               </button>
             )}
           </div>
@@ -387,7 +410,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
                 onClick={toggleMute}
                 title={muted ? "Unmute" : "Mute"}
               >
-                {muted ? "🔇" : "🎤"}
+                {muted ? <VolumeX size={16} /> : <Mic size={16} />}
               </button>
               {isVideo && (
                 <>
@@ -396,14 +419,14 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
                     onClick={toggleCam}
                     title={camOff ? "Camera on" : "Camera off"}
                   >
-                    {camOff ? "📷" : "🎥"}
+                    {camOff ? <CameraOff size={16} /> : <Video size={16} />}
                   </button>
                   <button
                     className="call-ctrl-btn"
                     onClick={onSwitchCamera}
                     title="Switch camera"
                   >
-                    🔄
+                    <RefreshCw size={16} />
                   </button>
                   <button
                     className="call-ctrl-btn"
@@ -422,7 +445,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               onClick={() => onEnd("accept")}
               title="Accept call"
             >
-              ✓
+              <Phone size={16} />
             </button>
           )}
           <button
@@ -430,7 +453,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
             onClick={() => onEnd("end")}
             title="End call"
           >
-            ✕
+            <PhoneOff size={16} />
           </button>
         </div>
       </div>
@@ -567,10 +590,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [messages,          setMessages]          = useState([]);
   const [text,              setText]              = useState("");
   const [onlineUsers,       setOnlineUsers]       = useState([]);
+  const [allUsers,          setAllUsers]          = useState([]);
+  const [userStatus,        setUserStatus]        = useState({});
   const [typingUser,        setTypingUser]        = useState("");
   const [isTyping,          setIsTyping]          = useState(false);
-  const [activeRoom,        setActiveRoom]        = useState("general");
-  const [activeRoomName,    setActiveRoomName]    = useState("General Chat");
+  const [activeRoom,        setActiveRoom]        = useState("");
+  const [activeRoomName,    setActiveRoomName]    = useState("");
   const [search,            setSearch]            = useState("");
   const [attachment,        setAttachment]        = useState(null);
   const [attachmentLoading, setAttachmentLoading] = useState(false);
@@ -590,7 +615,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const localStreamRef    = useRef(null);
   // FIX: Single ICE queue, cleared on every new call setup
   const iceCandidateQueue = useRef([]);
-  const activeRoomRef     = useRef("general");
+  const activeRoomRef     = useRef("");
   const bottomRef         = useRef(null);
   const typingTimer       = useRef(null);
   const fileInputRef      = useRef(null);
@@ -811,9 +836,17 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       if (socket.connected) socket.emit("user_online", { username: user.username });
     }, 5000);
 
-    socket.on("online_users", (users) =>
-      setOnlineUsers(users.filter(u => u !== user.username))
-    );
+    socket.on("online_users", (users) => {
+      const others = users.filter(u => u !== user.username);
+      setOnlineUsers(others);
+      setAllUsers(prev => prev.length ? prev : others);
+      setUserStatus(
+        others.reduce((acc, name) => {
+          acc[name] = true;
+          return acc;
+        }, {})
+      );
+    });
 
     return () => {
       clearInterval(interval);
@@ -821,6 +854,36 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       setSocketReady(false);
     };
   }, [user.username]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const urls = [
+          `${BACKEND_URL}/api/auth/users`,
+          `${BACKEND_URL}/api/users`,
+        ];
+        let response;
+        for (const url of urls) {
+          try {
+            response = await axios.get(url);
+            if (response?.data) break;
+          } catch (err) {
+            if (!err.response || err.response.status !== 404) throw err;
+          }
+        }
+        if (!response?.data) return;
+        const rawUsers = Array.isArray(response.data)
+          ? response.data
+          : response.data.users || [];
+        const users = rawUsers.map(u => typeof u === "string" ? u : u.username).filter(Boolean);
+        setAllUsers(users.filter(name => name !== user.username));
+      } catch (err) {
+        console.warn("Could not load registered users:", err?.message || err);
+        setAllUsers(prev => prev.length ? prev : onlineUsers);
+      }
+    };
+    fetchUsers();
+  }, [user.username, onlineUsers]);
 
   // ── Messages ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -926,6 +989,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
+    if (!activeRoom) {
+      socket.off("chat_history");
+      socket.off("user_typing");
+      return;
+    }
+
     activeRoomRef.current = activeRoom;
     socket.emit("join_room", { room: activeRoom });
     setMessages([]);
@@ -950,6 +1019,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         typingTimer.current = setTimeout(() => setIsTyping(false), 2000);
       }
     });
+    return () => {
+      socket.off("chat_history");
+      socket.off("user_typing");
+    };
   }, [activeRoom, user.username]);
 
   useEffect(() => {
@@ -968,12 +1041,15 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const handleTyping = (e) => {
     setText(e.target.value);
-    if (socketRef.current?.connected)
+    if (socketRef.current?.connected && activeRoom)
       socketRef.current.emit("typing", { username: user.username, room: activeRoom });
   };
 
   const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
   const handleFileChange = (e) => {
@@ -1049,6 +1125,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const addEmoji = (emoji) => setText(prev => prev + emoji);
 
   const sendMessage = () => {
+    if (!activeRoom) {
+      alert("Select a user to start chatting.");
+      return;
+    }
     if (attachmentLoading) return;
     if (!text.trim() && !attachment) return;
     if (!socketRef.current?.connected) {
@@ -1119,10 +1199,15 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socketRef.current.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
-  const filteredUsers = onlineUsers.filter(u =>
-    u.toLowerCase().includes(search.toLowerCase())
-  );
-  const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
+  const filteredUsers = allUsers
+    .filter(u => u.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aOnline = userStatus[a] ? 0 : 1;
+      const bOnline = userStatus[b] ? 0 : 1;
+      if (aOnline !== bOnline) return aOnline - bOnline;
+      return a.localeCompare(b);
+    });
+  const onlineCount = filteredUsers.filter(u => userStatus[u]).length;
 
   // Build message list with date separators
   const messagesWithDates = [];
@@ -1143,7 +1228,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         {lightboxImg && (
           <div className="lightbox" onClick={() => setLightboxImg(null)}>
             <img src={lightboxImg} alt="full" className="lightbox-img" />
-            <button className="lightbox-close" onClick={() => setLightboxImg(null)}>✕</button>
+            <button className="lightbox-close" onClick={() => setLightboxImg(null)}><X size={18} /></button>
           </div>
         )}
 
@@ -1170,14 +1255,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         {/* ── Sidebar ───────────────────────────────────────────────────────── */}
         <div className="sidebar">
           <div className="sidebar-header">
-            <div className="brand-logo">💬</div>
+            <div className="brand-logo"><MessageCircle size={18} /></div>
             <span className="brand-label">ChatApp</span>
             <button
               className="icon-btn theme-btn"
               onClick={toggleTheme}
               title={isDark ? "Light mode" : "Dark mode"}
             >
-              {isDark ? "☀️" : "🌙"}
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button
               className="icon-btn settings-btn"
@@ -1202,7 +1287,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
 
           <div className="search-wrap">
-            <span className="search-ico">🔍</span>
+            <span className="search-ico"><Search size={14} /></span>
             <input
               className="search-inp"
               placeholder="Search users..."
@@ -1210,38 +1295,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
               onChange={e => setSearch(e.target.value)}
             />
             {search && (
-              <button className="search-clear" onClick={() => setSearch("")}>✕</button>
+              <button className="search-clear" onClick={() => setSearch("")}> <X size={12} /> </button>
             )}
           </div>
 
           <div className="sidebar-scroll">
-            {showGeneral && (
-              <>
-                <div className="section-lbl">Rooms</div>
-                <div
-                  className={`contact ${activeRoom === "general" ? "active" : ""}`}
-                  onClick={() => switchRoom("general", "General Chat")}
-                >
-                  <div className="contact-av" style={{
-                    background: "linear-gradient(135deg,#6c63ff,#9b8fff)",
-                    fontSize: 18, width: 40, height: 40,
-                    borderRadius: "50%", display: "flex",
-                    alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  }}>💬</div>
-                  <div className="contact-info">
-                    <div className="contact-name">General Chat</div>
-                    <div className="contact-last">Everyone can chat here</div>
-                  </div>
-                  {unreadCounts["general"] > 0 && (
-                    <div className="unread-badge">{unreadCounts["general"]}</div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <div className="section-lbl">Online — {filteredUsers.length}</div>
+            <div className="section-lbl">
+              Contacts · {filteredUsers.length} users
+              <span style={{ float: "right", fontWeight: 500, color: "#8888aa" }}>
+                {onlineCount} online
+              </span>
+            </div>
             {filteredUsers.length === 0 && search === "" && (
-              <div className="empty-users">No other users online</div>
+              <div className="empty-users">No users found yet. Create an account to invite more people.</div>
             )}
             {filteredUsers.length === 0 && search !== "" && (
               <div className="empty-users">No results for "{search}"</div>
@@ -1249,6 +1315,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
             {filteredUsers.map((u, i) => {
               const roomId = getRoomId(user.username, u);
+              const isOnline = !!userStatus[u];
               return (
                 <div
                   key={i}
@@ -1259,11 +1326,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                     <div className="contact-av" style={{ background: getColor(u) }}>
                       {u[0].toUpperCase()}
                     </div>
-                    <span className="online-badge" />
+                    <span
+                      className="online-badge"
+                      style={{
+                        background: isOnline ? "#4ade80" : "#f87171",
+                        boxShadow: isOnline ? "0 0 0 2px rgba(74, 222, 128, 0.18)" : "0 0 0 2px rgba(248, 113, 113, 0.18)",
+                      }}
+                    />
                   </div>
                   <div className="contact-info">
                     <div className="contact-name">{u}</div>
-                    <div className="contact-last online-text">Online</div>
+                    <div className="contact-last" style={{ color: isOnline ? "#4ade80" : "#f87171" }}>
+                      {isOnline ? "Online" : "Offline"}
+                    </div>
                   </div>
                   {unreadCounts[roomId] > 0 && (
                     <div className="unread-badge">{unreadCounts[roomId]}</div>
@@ -1278,23 +1353,24 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         <div className="chat-main">
           <div className="chat-header">
             <div className="ch-av" style={{
-              background: activeRoom === "general"
-                ? "linear-gradient(135deg,#6c63ff,#9b8fff)"
-                : getColor(activeRoomName),
-              fontSize: activeRoom === "general" ? 20 : 16,
+              background: activeRoom
+                ? getColor(activeRoomName)
+                : "linear-gradient(135deg,#6c63ff,#9b8fff)",
+              fontSize: activeRoom ? 16 : 20,
             }}>
-              {activeRoom === "general" ? "💬" : activeRoomName[0].toUpperCase()}
+              {activeRoom ? activeRoomName[0].toUpperCase() : <Smile size={28} />}
             </div>
             <div className="ch-info">
-              <div className="ch-name">{activeRoomName}</div>
+              <div className="ch-name">
+                {activeRoomName || "Welcome"}
+              </div>
               <div className="ch-status">
-                <span className="online-dot" />
-                {activeRoom === "general"
-                  ? `${onlineUsers.length + 1} members online`
+                {!activeRoom
+                  ? "Select a user to start chatting"
                   : "Private · End-to-end encrypted"}
               </div>
             </div>
-            {activeRoom !== "general" && (
+            {activeRoom && (
               <div className="ch-actions">
                 <button
                   className="call-icon-btn voice"
@@ -1322,13 +1398,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           <div className="messages" onClick={() => setShowEmojiPicker(false)}>
             {messages.length === 0 && (
               <div className="empty-chat">
-                <div className="empty-icon">{activeRoom === "general" ? "💬" : "🔒"}</div>
+                <div className="empty-icon">
+                  {activeRoom ? <Lock size={28} /> : <Smile size={28} />}
+                </div>
                 <p className="empty-title">
-                  {activeRoom === "general"
-                    ? "Welcome to General Chat!"
-                    : `Private chat with ${activeRoomName}`}
+                  {activeRoom
+                    ? `Private chat with ${activeRoomName}`
+                    : "Select a user to start chatting"}
                 </p>
-                <p className="empty-sub">Be the first to say hello</p>
+                <p className="empty-sub">
+                  {activeRoom
+                    ? "Be the first to say hello"
+                    : "Tap a contact from the sidebar to open a private chat."}
+                </p>
               </div>
             )}
 
@@ -1411,12 +1493,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                                 className="file-download-link"
                               >
                                 <div className="file-card">
-                                  <span className="file-card-icon">📄</span>
+                                          <span className="file-card-icon"><FileText size={16} /></span>
                                   <div className="file-card-info">
                                     <div className="file-card-name">{msg.fileData.name}</div>
                                     <div className="file-card-size">{formatBytes(msg.fileData.size)}</div>
                                   </div>
-                                  <span className="file-card-dl">⬇</span>
+                                  <span className="file-card-dl"><Download size={16} /></span>
                                 </div>
                               </a>
                             )}
@@ -1442,13 +1524,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                             className="msg-action-btn edit"
                             onClick={() => startEdit(msg)}
                             title="Edit"
-                          >✏️</button>
+                          ><Pencil size={14} /></button>
                         )}
                         <button
                           className="msg-action-btn delete"
                           onClick={() => deleteMessage(msg._id)}
                           title="Delete"
-                        >🗑️</button>
+                        ><Trash2 size={14} /></button>
                       </div>
                     )}
                   </div>
@@ -1477,7 +1559,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           {attachmentLoading && (
             <div className="attach-preview">
               <div className="attach-file-preview">
-                <span>⏳</span>
+                <Loader size={16} className="spin" />
                 <div><div className="attach-fname">Processing…</div></div>
               </div>
             </div>
@@ -1489,7 +1571,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                 <img src={attachment.dataUrl} alt="preview" className="attach-img" />
               ) : (
                 <div className="attach-file-preview">
-                  <span>📄</span>
+                  <FileText size={16} />
                   <div>
                     <div className="attach-fname">{attachment.name}</div>
                     <div className="attach-fsize">{formatBytes(attachment.size)}</div>
@@ -1515,27 +1597,30 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             <button
               className="input-icon-btn"
               title="Attach file"
-              onClick={() => fileInputRef.current?.click()}
-            >📎</button>
+              onClick={() => activeRoom && fileInputRef.current?.click()}
+              style={{ opacity: activeRoom ? 1 : 0.5, cursor: activeRoom ? "pointer" : "not-allowed" }}
+            ><Paperclip size={16} /></button>
             <button
               className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`}
               title="Emoji"
-              onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(v => !v); }}
-            >😊</button>
+              onClick={(e) => { e.stopPropagation(); if (activeRoom) setShowEmojiPicker(v => !v); }}
+              style={{ opacity: activeRoom ? 1 : 0.5, cursor: activeRoom ? "pointer" : "not-allowed" }}
+            ><Smile size={16} /></button>
             <textarea
               className="msg-input"
-              placeholder={`Message ${activeRoomName}...`}
+              placeholder={activeRoom ? `Message ${activeRoomName}...` : "Select a contact to start"}
               value={text}
               onChange={handleTyping}
               onKeyDown={handleKey}
               rows={1}
+              disabled={!activeRoom}
             />
             <button
               className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
               onClick={sendMessage}
-              disabled={(!text.trim() && !attachment) || attachmentLoading}
+              disabled={!activeRoom || ((!text.trim() && !attachment) || attachmentLoading)}
             >
-              &#x27A4;
+              <Send size={18} />
             </button>
           </div>
         </div>
