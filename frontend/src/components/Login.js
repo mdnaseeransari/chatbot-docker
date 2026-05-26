@@ -3,6 +3,8 @@ import axios from "axios";
 import { User, Lock, Eye, EyeOff, AlertTriangle, ArrowRight, Sun, Moon } from "lucide-react";
 import "./Login.css";
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+
 function AnimatedBg({ dark }) {
   const canvasRef = useRef(null);
 
@@ -89,8 +91,8 @@ function Login({ onLogin }) {
     setLoading(true);
     setError("");
     const url = tab === "register"
-      ? "http://localhost:5000/api/auth/register"
-      : "http://localhost:5000/api/auth/login";
+      ? `${BACKEND_URL}/api/auth/register`
+      : `${BACKEND_URL}/api/auth/login`;
     try {
       const res = await axios.post(url, { username, password });
       if (tab === "register") {
