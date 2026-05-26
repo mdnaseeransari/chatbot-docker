@@ -19,7 +19,7 @@ pipeline {
         stage('Install Frontend') {
             steps {
                 dir('frontend') {
-                    sh 'npm install'
+                    bat 'npm install'
                 }
             }
         }
@@ -27,7 +27,7 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir('frontend') {
-                    sh 'npm run build'
+                    bat 'npm run build'
                 }
             }
         }
@@ -35,15 +35,15 @@ pipeline {
         stage('Install Backend') {
             steps {
                 dir('backend') {
-                    sh 'npm install'
+                    bat 'npm install'
                 }
             }
         }
 
         stage('Deploy to Render') {
             steps {
-                sh 'curl -X POST $RENDER_FRONTEND_DEPLOY_HOOK'
-                sh 'curl -X POST $RENDER_BACKEND_DEPLOY_HOOK'
+                bat 'curl -X POST %RENDER_FRONTEND_DEPLOY_HOOK%'
+                bat 'curl -X POST %RENDER_BACKEND_DEPLOY_HOOK%'
             }
         }
     }
